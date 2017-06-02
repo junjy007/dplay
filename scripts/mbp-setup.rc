@@ -1,0 +1,13 @@
+# universal
+export PROJECT_DIR=$(cd $(dirname ${BASH_SOURCE[0]})/.. && pwd)
+
+# suitable on my Macbook
+export PYTHONNOUSERSITE=True
+export PATH=${HOME}/toolbox/anaconda2/bin:$PATH
+export DATA_DIR=$PROJECT_DIR/DATA
+export SAVE_DIR=$PROJECT_DIR/SAVE
+
+source activate tf
+
+
+
