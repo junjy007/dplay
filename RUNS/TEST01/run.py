@@ -7,8 +7,10 @@ import numpy as np
 import imp  # Python 2
 from collections import deque
 import gym
+import time
 USE_CUDA = torch.cuda.is_available()
-BASEPATH = '/Users/junli/local/projects/dplay'
+REL_PROJ_PATH = 'projects/dplay'
+FULL_PROJ_PATH = os.path.join(os.environ['HOME'], REL_PROJ_PATH)
 
 def to_tensor_f32(x):
     t_ = torch.from_numpy(np.float32(np.ascontiguousarray(x)))
@@ -269,8 +271,11 @@ class DeepConvEncoder(nn.Module):
         # TODO: Maybe Cuda dummy variable is needed.
         if self.num_features is None:
             assert not (image_size is None), "Image size must be given in the first time"
-            dummy_input = Variable(torch.rand(1, self.input_channels, 
-                                              image_size['height'], image_size['width']))
+            dummy_input_t = torch.rand(1, self.input_channels, 
+                                       image_size['height'], image_size['width'])
+            if USE_CUDA:
+                dummy_input_t = dummy_input_t.cuda()
+            dummy_input = Variable(dummy_input_t)
             dummy_feature = self.feature(dummy_input)
             nfeat = np.prod(dummy_feature.size()[1:])
             self.num_features = nfeat
@@ -298,6 +303,8 @@ class Decoder(nn.Module):
         self._fullconn = nn.Sequential(self._fc1, self._fc2, nn.LogSoftmax())
         # LogSoftmax -- to comply with NLLLoss, which expects the LOG of predicted
         # probability and the target
+        if USE_CUDA:
+            self.cuda()
     
     def forward(self, x):
         return self._fullconn(x)
@@ -310,6 +317,13 @@ class Decoder(nn.Module):
 
 # FRAMEWORK_RLNET: RLNet-v0
 class RLNet(nn.Module):
+    """
+    NB Each component is responsible for itself on cuda or no cuda (some
+    needs to play with some data for self inspection -- e.g. convolutional 
+    layers only know the dimension of the input at runtime.).
+
+    Cuda status must be consistent among all components.
+    """
     def __init__(self, enc, dec):
         """
         :param enc: Feature extractor. See Encoder.
@@ -426,7 +440,8 @@ class Keeper:
                 'save_checkpoint': True,
                 'every_n_steps': 1,
                 'every_n_training': 1,
-                'every_n_episodes': 1}
+                'every_n_episodes': 1,
+                'every_n_time_records': 100}
             }
         
         """
@@ -462,6 +477,12 @@ class Keeper:
         self.report_opts = self.opts['report']
         self.last_reported_episode = -1
         self.last_reported_training = -1
+        self.last_reported_time_cost = -1
+        
+        self.timers={k_:deque([], 100) for k_ in 
+                     ['record_env_step', 'record_train_step', 
+                      'report_step', 'policy.get_action', 'env.step',
+                      'mem.add_experience', 'trainer.step']}
 
     def save(self):
         checkpoint_path = os.path.join(self.savepath,
@@ -500,6 +521,14 @@ class Keeper:
         for o, of in zip(self.objects, obj_full_fnames):
             o.load(of)
             # print "Load an object {} from {}".format(o.__class__.__name__, of)
+            
+    def set_timer(self):
+        self.timer = time.time()
+        
+    def record_time(self, fn):
+        t = time.time() - self.timer
+        self.timers[fn].append(t)
+        self.set_timer()
 
     def record_env_step(self, reward, term):
         r = float(reward)
@@ -559,7 +588,7 @@ class Keeper:
         n = self.report_opts['every_n_episodes']
         N = self.records['episodes']
         if n > 0 and N > 0 and N % n == 0 and N != self.last_reported_episode:
-            print "Episode {} steps {} reward {:.3f} running episode reward {:.3f} ".format(
+            print "Episode {} steps {:3d} reward {:.1f} running episode reward {:.2f} ".format(
                 N,
                 self.records['episode_length_history'][-1],
                 self.records['episode_reward_history'][-1],
@@ -578,13 +607,25 @@ class Keeper:
             ),
             self.last_reported_training = N
             did_rep = True
+            
+        # time cost
+        n = self.report_opts['every_n_time_records']
+        N = self.records['episodes']                  # This will stop working for a different training procedure.
+        if n > 0 and N > 0 and N % n == 0 and N != self.last_reported_time_cost:
+            print '\nRecent {:4d}:'.format(n),
+            for k_ in self.timers.keys():
+                print '{}:{:.3f}'.format(k_, np.sum(self.timers[k_])),
+            self.last_reported_time_cost = N
+            did_rep = True
 
         if did_rep:
             print
-
+            
+        
         return
 
-# FRAMEWORK_RL
+# Framework definition:
+# **Necessary to run this cell** to create experiment package for this framework
 RL_components = {
     'Preprocessor': Preprocessor,
     'ExperienceMemoryManager': ExperienceMemory,
@@ -618,10 +659,10 @@ decoder_opts = {
     'output_num':4
 }
 
-trainer_opts = {'Optimiser': torch.optim.Adagrad, 'learning_rate':1e-6}
+trainer_opts = {'Optimiser': torch.optim.Adagrad, 'learning_rate':1e-4}
 
 path_opts = {
-    'BASE_PATH': BASEPATH,
+    'BASE_PATH': FULL_PROJ_PATH,
     'RUN_PATH': 'RUNS',
     'experiment_id': 'TEST01'}
 
@@ -640,14 +681,15 @@ if not os.path.exists(save_dir):
 
 keeper_opts = {
     'train_every_n_episodes': 1,
-    'save_every_n_training_steps': 10,
-    'draw_every_n_training_steps': -1,
-    'max_training_steps': 100,
+    'save_every_n_training_steps': 5000,
+    'draw_every_n_training_steps': 100,
+    'max_training_steps': 2000000,
     'save_path': save_dir,
     'report': {'save_checkpoint': True,
                'every_n_steps': -1,
                'every_n_training': 1,
-               'every_n_episodes': 1}
+               'every_n_episodes': 1,
+               'every_n_time_records': 100}
 }
     
 # CREATE LEARNING COMPONENTS
@@ -662,15 +704,23 @@ policy = RL_components['Policy'](rlnet)
 trainer = RL_components['Trainer'](rlnet, mem, trainer_opts)
 keeper = RL_components['Keeper']([enc, dec, policy, mem], keeper_opts)  # objects has "save/load" interface
 
+# RUNNING: this part does the actual work. 
+# NOT necessary to run this cell to create experiment package for this framework
 keeper.load()
 state = preproc.process(env.reset())
 
-while not keeper.need_stop:  
+
+while not keeper.need_stop:
+    keeper.set_timer()
     action, action_prob = policy.get_action(state)
+    keeper.record_time('policy.get_action')
     next_state, reward, is_terminal, _ = env.step(action)
+    keeper.record_time('env.step')
     next_state = preproc(next_state)
     ep = keeper.records['episodes']
+    keeper.set_timer()
     mem.add_experience(ep, state, action, reward, is_terminal, None)
+    keeper.record_time('mem.add_experience')
     # None: We don't use last prediction (will predict in traing step)
     
     if is_terminal:
@@ -678,11 +728,15 @@ while not keeper.need_stop:
     else:
         state = next_state
         
+    keeper.set_timer()
     keeper.record_env_step(reward, is_terminal)
+    keeper.record_time('record_env_step')
     
     if keeper.need_train:  # TODO train condition call back
         loss = trainer.step()
+        keeper.record_time('trainer.step')
         keeper.record_train_step(loss)
+        keeper.record_time('record_train_step')
 
     if keeper.need_save:
         keeper.save()
@@ -690,5 +744,7 @@ while not keeper.need_stop:
     if keeper.need_draw:
         env.render()
     
+    keeper.set_timer()
     keeper.report_step()
+    keeper.record_time('report_step')
 
