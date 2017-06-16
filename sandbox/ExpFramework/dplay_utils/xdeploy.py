@@ -6,7 +6,7 @@ import re
 import numpy as np
 import os
 import shutil
-
+import fnmatch
 
 class CellSectionParser(object):
     def __init__(self, start_token, end_token=None):
@@ -75,9 +75,8 @@ class ComponentParser(CellSectionParser):
         for s_ in src:
             pl = re.split('\s+', s_)
             match1 = pl[0] == 'class' and pl[1] == cls_name
-            match2 = pl[0] == 'from' and pl[2] == 'import' and pl[3] == cls_name
-            if pl[0] == 'from':
-                print pl
+            match2 = pl[0] == 'from' and pl[2] == 'import' # and pl[3] == cls_name
+            # take all "import" statements from component section
             if match1:
                 # print "Find def", s_
                 return True, None
@@ -126,6 +125,17 @@ def collect_source_code(nb_fname, framework_name, components):
     return src, dep_srcs  # TODO return dependencies
 
 
+def copypytree(sdir, ddir):
+    for item in os.listdir(sdir):
+        s = os.path.join(sdir, item)
+        d = os.path.join(ddir, item)
+        if os.path.isdir(s):
+            if not os.path.exists(d):
+                os.mkdir(d)
+            copypytree(s, d)
+        elif os.path.splitext(item)[1]=='.py':
+            shutil.copy2(s, d)
+
 def deploy(nb_fname, framework_name, components, running_dir):
     """
     Deploy the experiment defined by a framework.
@@ -137,29 +147,36 @@ def deploy(nb_fname, framework_name, components, running_dir):
     :return:
 
     """
-    print "XDeploy"
     # TODO: warm start the experiment by spawning from another experiment's checkpoints
     if not os.path.exists(running_dir):
         os.mkdir(running_dir)  # Not using "makedirs":
         # User must prepare parent directory for experiment package
 
     runner_src, dep_src_fnames = collect_source_code(nb_fname, framework_name, components)
-    print "Dependency Module Files: {}".format(dep_src_fnames)
+    # print "Dependency Module Files: {}".format(dep_src_fnames)
     with open(os.path.join(running_dir, 'run.py'), 'w') as f:
         for l in runner_src:
             f.write(l)
 
-    for fn in dep_src_fnames:
-        assert isinstance(fn, list) and len(fn) > 0
-        mod_fullname_s = os.path.join(*fn)
-        if len(fn) > 1:  # prepare destination dir
-            mod_subdir_t = os.path.join(running_dir, *fn[:-1])
-            if not os.path.exists(mod_subdir_t):
-                os.mkdir(mod_subdir_t)
-        else:
-            mod_subdir_t = running_dir
-        mod_fullname_t = os.path.join(mod_subdir_t, fn[-1])
-        shutil.copyfile(mod_fullname_s, mod_fullname_t)
+    nb_dir = os.path.split(nb_fname)[0]
+    if len(nb_dir) == 0:
+        nb_dir = '.'
+    copypytree(nb_dir, running_dir)
+    # for fn in dep_src_fnames:
+    #     assert isinstance(fn, list) and len(fn) > 0
+    #     mod_fullname_s = os.path.join(*fn)
+    #     if len(fn) > 1:  # prepare destination dir
+    #         mod_subdir_t = os.path.join(running_dir, *fn[:-1])
+    #         if not os.path.exists(mod_subdir_t):
+    #             os.makedirs(mod_subdir_t)
+    #     else:
+    #         mod_subdir_t = running_dir
+    #     mod_fullname_t = os.path.join(mod_subdir_t, fn[-1])
+    #     shutil.copyfile(mod_fullname_s, mod_fullname_t)
+    #     init_file_s = os.path.join(os.path.join(*fn[:-1]), '__init__.py')
+    #     init_file_t = os.path.join(running_dir, init_file_s)
+    #     if not os.path.exists(init_file_t):
+    #         shutil.copyfile(init_file_s, init_file_t)
 
 
 if __name__ == '__main__':
