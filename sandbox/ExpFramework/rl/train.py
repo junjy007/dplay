@@ -25,6 +25,7 @@ class OneStepPolicyGradientTrainer:
         )
         logP = self.net(states)  # predicted log-prob of taking different actions
         advantages.data -= advantages.data.mean()  # An operation for tensors not Variables
+        advantages.data /= advantages.data.std()   # Normalise advantage
         advantages = advantages.unsqueeze(1)  # -> sample_num x 1
         advantages = advantages.expand(
             advantages.size(0),
