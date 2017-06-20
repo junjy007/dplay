@@ -13,7 +13,7 @@ class Decoder(nn.Module):
                               out_features=opts['fc1_hidden_unit_num'])
         self._fc2 = nn.Linear(in_features=opts['fc1_hidden_unit_num'],
                               out_features=opts['output_num'])
-        self._fullconn = nn.Sequential(self._fc1, self._fc2, nn.LogSoftmax())
+        self._fullconn = nn.Sequential(self._fc1, nn.ReLU(inplace=True), self._fc2, nn.LogSoftmax())
         # LogSoftmax -- to comply with NLLLoss, which expects the LOG of predicted
         # probability and the target
         if does_use_cuda():
