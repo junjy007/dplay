@@ -1,77 +1,12 @@
 """
-Deploy experiment from notebooks or scripts (scripts will be copied to the running directory,
-modules in sub-folders duplicating current code structure.)
-Usage:
-  xdeploy.py deploy <exp_src> [to <run_dir>]
+Deploy experiment.
 """
 import json
 import re
 import numpy as np
 import os
 import shutil
-import subprocess
-import docopt
-
-def get_hostname():
-    p = subprocess.Popen('hostname', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    hostname = p.stdout.readlines()[0][:-1]
-    return hostname
-
-def get_project_path():
-    hostname = get_hostname()
-    proj_path_dist = {
-        'maibu': 'local/projects/dplay',
-        'DBox': 'projects/dplay',
-    }
-    rel_path = proj_path_dist.get(hostname, 'projects/dplay')
-    full_path = os.path.join(os.environ['HOME'], rel_path)
-    return full_path
-
-def get_filename_we(fn):
-    """
-    Returns the filename, without path, without extension
-    :return:
-    """
-    return os.path.splitext(os.path.split(fn)[1])[0]
-
-
-def get_path(fn):
-    """
-    Given a filename, (relatively locatable from (pwd)), get the absolute
-    path to the file.
-    :return:
-    """
-    return os.path.abspath(os.path.split(fn)[0])
-
-
-def load_test_config(cfname, debug_info=False):
-    """
-    Load experiment config from specified JSON file.
-    :param cfname: JSON filename, ext-name WILL BE IGNORED. So
-      if using the same filename as the experiment script, this function
-      can be called simply using load_test_config(__file__), where
-      experiment script python filename will be used to infer the
-      configuration filename.
-    :return:
-    """
-
-    fn_ = get_filename_we(cfname)
-    pth_ = get_path(cfname)
-    if debug_info:
-        print "Starting Experiment at {}\n\t{}".format(pth_, fn_)
-    conf_file = os.path.join(pth_, fn_ + '.json')
-    try:
-        with open(conf_file, 'r') as f:
-            conf = json.load(f)
-        if debug_info:
-            print "with following settings ..."
-            print conf
-    except:
-        print "Failed to load experiment settings from {}".format(conf_file)
-        exit(-1)
-    return conf
-
-
+import fnmatch
 
 class CellSectionParser(object):
     def __init__(self, start_token, end_token=None):
@@ -201,9 +136,9 @@ def copypytree(sdir, ddir):
         elif os.path.splitext(item)[1]=='.py':
             shutil.copy2(s, d)
 
-def deploy_nb(nb_fname, framework_name, components, running_dir):
+def deploy(nb_fname, framework_name, components, running_dir):
     """
-    Deploy the experiment defined by a framework in an experimental notebook.
+    Deploy the experiment defined by a framework.
     :param nb_fname:
     :param framework_name:
     :param components: 'component-desc': class, using which classes to
@@ -243,47 +178,16 @@ def deploy_nb(nb_fname, framework_name, components, running_dir):
     #     if not os.path.exists(init_file_t):
     #         shutil.copyfile(init_file_s, init_file_t)
 
-def deploy_sc(experiment_src, running_dir=''):
-    """
-    Deploy an experiment script. (generally summerised from notebook experiment)
-    :return:
-    """
-    conf = load_test_config(experiment_src)
-    test_str = get_filename_we(experiment_src)
-    if len(running_dir) == 0:
-        bdir = get_project_path()
-        if len(test_str) > 9:
-            test_str_d = test_str[:9]
-        else:
-            test_str_d = test_str
-        running_dir = os.path.join(bdir, 'RUNS', test_str_d)
-        print "Will deploy at {}".format(running_dir)
 
-    if not os.path.exists(running_dir):
-        os.mkdir(running_dir)
-
-    copypytree('.', running_dir)
-    shutil.copy2(experiment_src, running_dir)
-
-    # writing json, instead of copying, we have chance to manipulate
-    # options when deploying.
-    dest_conf_file = os.path.join(running_dir, test_str+'.json')
-    with open(dest_conf_file, 'w') as f:
-        json.dump(conf, f, indent=2)
-
-
-def test_deploy_nb():
+if __name__ == '__main__':
     # noinspection PyClassHasNoInit
     class RLNet:
         pass
+
     # noinspection PyClassHasNoInit
     class DeepConvEncoder:
         pass
+
+
     collect_source_code('nb01_reinforce_framework.ipynb', 'F1',
                         {'1': RLNet, '2': DeepConvEncoder})
-
-if __name__ == '__main__':
-    opts = docopt.docopt(__doc__)
-    running_dir = opts['<run_dir>'] if opts['to'] else ''
-    deploy_sc(opts['<exp_src>'], running_dir)
-

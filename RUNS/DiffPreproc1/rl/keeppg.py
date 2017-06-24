@@ -15,7 +15,8 @@ def running_val(running_v, v):
     return v if running_v is None \
         else running_v * a + v * (1.0 - a)
 
-class Keeper(object):
+
+class Keeper:
     """
     Keeper helps administrate learning:
     ** Methods
@@ -149,19 +150,44 @@ class Keeper(object):
         self.set_timer()
 
     def record_env_step(self, reward, term):
-        raise NotImplementedError("Keeper::record_env_step must be implemented in a sub-class")
+        rec = self.records
+        rec['total_steps'] += 1
+        dt = time.time() - self.primary_step_timer
+        self.records['total_time'] += dt
+        self.records['recent_time_cost'] += dt
+        self.records['recent_steps'] += 1
+        self.primary_step_timer = time.time()
+        self.records['recent_reward'] += reward
+        if term:
+            rec['episodes'] += 1
+            rec['recent_episodes'] += 1
+            if rec['episodes'] % self.opts['train_every_n_episodes'] == 0:
+                self.need_train = True  # reset when recording a training step
+            self.need_draw = False
 
     # noinspection PyTypeChecker
     def record_train_step(self, loss):
-        raise NotImplementedError("Keeper::record_train_step must be implemented in a sub-class")
+        """
+        Record training loss. This is separate from recording environment rewards because
+        training step happens every few steps.
+        """
+        loss = float(loss)
+        self.need_train = False
+        rec = self.records
+        rec['loss_history'].append(loss)
+        rec['running_loss'] = running_val(rec['running_loss'], loss)
+        rec['training_steps'] += 1
+        k_ = self.opts['save_every_n_training_steps']
+        if k_ > 0 and rec['training_steps'] % k_ == 0:
+            self.need_save = True
+        k_ = self.opts['draw_every_n_training_steps']
+        if k_ > 0 and rec['training_steps'] % k_ == 0:
+            self.need_draw = True  # reset when an episode ends
+        if rec['training_steps'] >= self.opts['max_training_steps']:
+            self.need_stop = True  # TODO: use more elegant conditions
 
     # noinspection PyPep8Naming,PyTypeChecker
     def report_step(self):
-        """
-        Basic report: after a number of steps (report_opts['every_n_steps']), print out
-        recent reward, episode length (how long our character lived).
-        :return:
-        """
         did_rep = False
         # agent-environment interaction steps -- fastest changing
         n = self.report_opts['every_n_steps']
@@ -255,52 +281,6 @@ class Keeper(object):
                 plt.xticks(np.linspace(0, n-1, 10))
             plt.title(tl)
             plt.savefig(fn)
-
-
-class PolicyGradKeeper(Keeper):
-    """
-    Keeper for running policy gradient
-    """
-    def __init__(self, objs, opts):
-        super(PolicyGradKeeper, self).__init__(objs, opts)
-
-    def record_env_step(self, reward, term):
-        rec = self.records
-        rec['total_steps'] += 1
-        dt = time.time() - self.primary_step_timer
-        self.records['total_time'] += dt
-        self.records['recent_time_cost'] += dt
-        self.records['recent_steps'] += 1
-        self.primary_step_timer = time.time()
-        self.records['recent_reward'] += reward
-        if term:
-            rec['episodes'] += 1
-            rec['recent_episodes'] += 1
-            if rec['episodes'] % self.opts['train_every_n_episodes'] == 0:
-                self.need_train = True  # reset when recording a training step
-            self.need_draw = False
-
-    def record_train_step(self, loss):
-        """
-        Record training loss. This is separate from recording environment rewards because
-        training step happens every few steps.
-        """
-        loss = float(loss)
-        self.need_train = False
-        rec = self.records
-        rec['loss_history'].append(loss)
-        rec['running_loss'] = running_val(rec['running_loss'], loss)
-        rec['training_steps'] += 1
-        k_ = self.opts['save_every_n_training_steps']
-        if k_ > 0 and rec['training_steps'] % k_ == 0:
-            self.need_save = True
-        k_ = self.opts['draw_every_n_training_steps']
-        if k_ > 0 and rec['training_steps'] % k_ == 0:
-            self.need_draw = True  # reset when an episode ends
-        if rec['training_steps'] >= self.opts['max_training_steps']:
-            self.need_stop = True  # TODO: use more elegant conditions
-
-
 
 
 class RLAlgorithm:

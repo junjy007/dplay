@@ -128,8 +128,3 @@ class ExperienceMemory:
 
     def load(self, fname):
         return
-
-class TDMemory:
-    """
-    Memory for temporal difference algorithms, with new
-    """

@@ -1,0 +1,40 @@
+{
+  "paths": {
+    "runs": "RUNS", 
+    "base": ""
+  }, 
+  "trainer_opts": {
+    "optimiser": "RMSprop", 
+    "loss": "NegLogLikelihood", 
+    "optimiser_opts": {
+      "lr": 0.0001
+    }
+  }, 
+  "keeper_opts": {
+    "save_every_n_training_steps": 100, 
+    "max_training_steps": 2000000, 
+    "train_every_n_episodes": 300, 
+    "save_path": "", 
+    "report": {
+      "every_n_time_records": 100, 
+      "every_n_training": 1, 
+      "every_n_steps": 10000, 
+      "every_n_episodes": 1, 
+      "save_checkpoint": true
+    }, 
+    "draw_every_n_training_steps": -1
+  }, 
+  "encoder_opts": {
+    "input_channels": 1
+  }, 
+  "experiment_id": "", 
+  "experience_opts": {
+    "discount": 0.99, 
+    "capacity": 15000
+  }, 
+  "decoder_opts": {
+    "output_num": 4, 
+    "fc1_hidden_unit_num": 256, 
+    "input_num": ""
+  }
+}

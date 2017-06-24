@@ -1,26 +1,17 @@
-# import torch
 import torch.nn as nn
-import torch.optim as optim
 from torch.autograd import Variable
 # from dplay_utils.tensordata import to_numpy
 
 
-# noinspection PyUnresolvedReferences
 class OneStepPolicyGradientTrainer:
     def __init__(self, net, memory, opts):
         """
-        :type net: nn.module
+        :type net:
         """
-        if opts['optimiser'] == 'RMSprop':
-            self.optimiser = optim.RMSprop(net.parameters(), **opts['optimiser_opts'])
-        else:
-            raise ValueError("Unsupported training:optimisation option {}".opts['optimiser'])
-
-        if opts['loss'] == 'NegLogLikelihood':
-            self.loss_fn = nn.NLLLoss(size_average=False)
-        else:
-            raise ValueError("Unsupported training:loss option {}".opts['loss'])
-
+        self.optimiser = opts['Optimiser'](
+            net.parameters(),  # e.g. torch.optim.Adam()
+            lr=opts['learning_rate'])
+        self.loss_fn = nn.NLLLoss(size_average=False)
         self.net = net
         self.memory = memory
 
@@ -33,7 +24,6 @@ class OneStepPolicyGradientTrainer:
             Variable(t_, requires_grad=False)
             for t_ in self.memory.get_next_training_batch()
         )
-        # type advantages:torch.tensor
         advantages.data -= advantages.data.mean()  # An operation for tensors not Variables
         advantages.data /= advantages.data.std()  # Normalise advantage
         # ==== Batch computing loss for all trail steps ====
@@ -54,10 +44,9 @@ class OneStepPolicyGradientTrainer:
         # Back-prop for each trail-experience, i.e. T0, T1, ...
         self.optimiser.zero_grad()
         loss_value = 0.0
-        sample_num = states.size(0)
-        for ti in range(sample_num):
+        for ti in range(states.size(0)):
             logP_i = self.net(states[ti].unsqueeze(0))
-            L_i = self.loss_fn(logP_i, actions[ti]) * advantages[ti] / float(sample_num)
+            L_i = self.loss_fn(logP_i, actions[ti]) * advantages[ti]
             L_i.backward()  # this will accumulate gradients in all network parameters
             # ** with applying weight = advantages[ti] **
             loss_value += L_i.data[0]  # L_i is now a singleton tensor

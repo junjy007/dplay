@@ -1,1 +1,7 @@
-*
+*checkpoint*
+*.*
+!*.py
+!*.json
+*checkpoint*/*.json
+info.json
+
