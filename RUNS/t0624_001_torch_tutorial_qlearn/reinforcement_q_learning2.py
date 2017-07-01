@@ -206,24 +206,31 @@ class ReplayMemory(object):
 # network). In effect, the network is trying to predict the *quality* of
 # taking each action given the current input.
 #
-
+in_channel = 1
+in_imh = 160
+in_imw = 320
 class DQN(nn.Module):
 
     def __init__(self):
         super(DQN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2)
+        self.conv1 = nn.Conv2d(in_channel, 16, kernel_size=5, stride=2)
         self.bn1 = nn.BatchNorm2d(16)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2)
         self.bn2 = nn.BatchNorm2d(32)
         self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2)
         self.bn3 = nn.BatchNorm2d(32)
-        self.head = nn.Linear(448, 2)
+
+        dummy = nn.Sequential(self.conv1, self.conv2, self.conv3)(
+            Variable(torch.rand((1,in_channel,in_imh,in_imw)), volatile=True))
+        nfeat = np.prod(dummy.size())
+
+        self.head = nn.Linear(nfeat, 2)
+        print nfeat
 
     def forward(self, x):
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
-        print x.size()
         return self.head(x.view(x.size(0), -1))
 
 
@@ -278,7 +285,7 @@ import cv2
 def get_screen2():
     screen = env.render(mode='rgb_array')
     screen = cv2.cvtColor(screen, cv2.COLOR_RGB2GRAY)
-    screen = cv2.resize(screen, (84,84))
+    screen = cv2.resize(screen, (in_imw, in_imh))
     s = torch.from_numpy(screen[np.newaxis, np.newaxis, ...]).type(Tensor)
     return s
 
