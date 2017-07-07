@@ -19,10 +19,13 @@ FloatTensor = torch.cuda.FloatTensor if USE_CUDA else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if USE_CUDA else torch.LongTensor
 
 F_HEIGHT = F_WIDTH = 84
+SKIP_FRAMES = 4
 FRAMES_PER_STATE = 4
 BATCH_SIZE = 32
 LEARNING_RATE = 0.00025
 MOMENTUM = 0.95
+RMS_EPS = 0.01
+RMS_ALPHA = 0.95
 CAPACITY = 250000
 MIN_MEM = 20000
 EPS_START = 1.0
@@ -195,11 +198,12 @@ class Preprocessor:
 
 # noinspection PyShadowingNames,PyShadowingNames,PyShadowingNames,PyShadowingNames,PyShadowingNames,PyShadowingNames
 class Env:
-    def __init__(self, preprocessor, repeat_action):
+    def __init__(self, preprocessor, repeat_action, frames_per_state):
         self.env = gym.make('Pong-v0').unwrapped
         self.preproc = preprocessor
         self.state = None
         self.repeat_action = repeat_action
+        self.frames_per_state = frames_per_state
         self.reset()
 
     def reset(self):
@@ -207,7 +211,7 @@ class Env:
         self.env.reset()
         raw_frm = self.env.render(mode='rgb_array')
         f = self.preproc(raw_frm)
-        self.state = np.stack([f for _ in range(self.repeat_action)])
+        self.state = np.stack([f for _ in range(self.frames_per_state)])
         return self.state
 
     def step(self, a):
@@ -220,7 +224,7 @@ class Env:
 
             raw_frm = self.env.render(mode='rgb_array')
             f = self.preproc(raw_frm)
-            self.state[i, ...] = f
+        self.state = np.concatenate((self.state[1:], f[np.newaxis, ...]))
         return self.state, rr, term
 
     def render(self):
@@ -457,7 +461,9 @@ def learn(env, model):
 
     # loss_fn = torch.nn.SmoothL1Loss()
     loss_fn = torch.nn.MSELoss()
-    optim = torch.optim.RMSprop(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
+    optim = torch.optim.RMSprop(model.parameters(),
+                                lr=LEARNING_RATE, momentum=MOMENTUM,
+                                eps=RMS_EPS, alpha=RMS_ALPHA)
 
     state = env.reset()
     is_first_step = True
@@ -494,9 +500,8 @@ def learn(env, model):
             print '.',
 
         if len(mem) > MIN_MEM:
-            for ti in range(200):
-                ls = learn_step(model, model_, mem, optim, loss_fn)
-                recent_losses.append(ls)
+            ls = learn_step(model, model_, mem, optim, loss_fn)
+            recent_losses.append(ls)
 
             if i % SYNC_EVERY_N_STEPS == 0:
                 model.clone_to(model_)
@@ -532,7 +537,7 @@ def learn(env, model):
 if __name__ == '__main__':
     aopts = docopt.docopt(__doc__)
     preproc = Preprocessor(F_HEIGHT, F_WIDTH)
-    env = Env(preproc, FRAMES_PER_STATE)
+    env = Env(preproc, SKIP_FRAMES, FRAMES_PER_STATE)
     model = DQN((BATCH_SIZE, FRAMES_PER_STATE, F_HEIGHT, F_WIDTH))
     loss_history = []
     reward_history = []
