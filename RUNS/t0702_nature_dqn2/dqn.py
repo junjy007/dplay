@@ -1,6 +1,6 @@
 """
 Usage:
-    dqn.py learn | demo
+    dqn.py learn | demo | plot
 """
 import docopt
 import cv2
@@ -534,6 +534,11 @@ def learn(env, model):
                 print "Checkpoint saved to {}".format(latest_checkpoint)
 
 
+def plot_reward_history(reward_history):
+    plt.plot(reward_history)
+    plt.savefig('save/rewards.png')
+    
+
 if __name__ == '__main__':
     aopts = docopt.docopt(__doc__)
     preproc = Preprocessor(F_HEIGHT, F_WIDTH)
@@ -546,21 +551,25 @@ if __name__ == '__main__':
     try:
         with open('save/latest.json', 'r') as f:
             status = json.load(f)
-            EPS_START = status['eps']
-            STEP_START = status['steps']
-            model.load(status['latest_checkpoint'])
-            loss_history = status['loss_history']
-            reward_history = status['reward_history']
-            duration_history = status['duration_history']
-            print "Model loaded from {}\n, Step {}, Eps {:.6f}".format(
-                status['latest_checkpoint'],
-                STEP_START, EPS_START
-            )
+        EPS_START = status['eps']
+        STEP_START = status['steps']
+        loss_history = status['loss_history']
+        reward_history = status['reward_history']
+        duration_history = status['duration_history']
+        model.load(status['latest_checkpoint'])
+        print "Model loaded from {}\n, Step {}, Eps {:.6f}".format(
+            status['latest_checkpoint'],
+            STEP_START, EPS_START
+        )
     except Exception, e:
         print "Not loaded, ", str(e)
 
     if aopts['learn']:
         learn(env, model)
-
-    if aopts['demo']:
+    elif aopts['demo']:
         demo(env, model)
+    elif aopts['plot']:
+        assert len(reward_history) > 0, "No reward record found."
+        plot_reward_history(reward_history)
+
+
