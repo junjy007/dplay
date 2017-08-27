@@ -1,8 +1,14 @@
 """
 Usage:
-    dqn.py learn | demo | plot
+    dqn.py [learn | demo | plot]
 
 
+Modified from t0702 implementation:
+* test 1
+  - introduce no-op action.
+
+* test 2
+  - because the model seems to be unstable, I reduced learning rate.
 
 """
 import docopt
@@ -25,12 +31,12 @@ F_HEIGHT = F_WIDTH = 84
 SKIP_FRAMES = 4
 FRAMES_PER_STATE = 4
 BATCH_SIZE = 32
-LEARNING_RATE = 0.00025
+LEARNING_RATE = 0.0001 # 0.00025
 MOMENTUM = 0.95
 RMS_EPS = 0.01
 RMS_ALPHA = 0.95
 CAPACITY = 250000
-MIN_MEM = 20000
+MIN_MEM = 50000
 EPS_START = 1.0
 EPS_FINAL = 0.1
 EPS_DECAY = (EPS_START - EPS_FINAL) / 1e+6
@@ -38,9 +44,11 @@ STEP_START = 0
 RECORD_EVERY_N_STEPS = 10000
 SAVE_EVERY_N_STEPS = 50000
 SYNC_EVERY_N_STEPS = 10000
-ACTION_NUM = 2
-ACTION_BUTTON_MAP = [2, 3] # UP, DOWN
-
+ACTION_NUM = 3
+ACTION_BUTTON_MAP = [0, 2, 3] # NO_OP, UP, DOWN
+CLAMP_GRAD = True
+CLAMP_PARAM = True
+SAVE_PATH = 'save'
 
 def show_state(s, wname="tmp"):
     a = np.concatenate((s[0], s[2]))
@@ -340,9 +348,13 @@ def learn_step(model, model_, memory, optim, loss_fn, batch_size=32, discount=0.
     loss = loss_fn(pred_reward, target_reward)
     optim.zero_grad()
     loss.backward()
-    for p in model.parameters():
-        p.grad.data.clamp_(-1, 1)
+    if CLAMP_GRAD:
+        for p in model.parameters():
+            p.grad.data.clamp_(-1, 1)
     optim.step()
+    if CLAMP_PARAM:
+        for p in model.parameters():
+            p.data.clamp_(-1, 1)
     return loss.data[0]
 
 
@@ -466,7 +478,7 @@ def evaluate(model, model_, memory, discount=0.99, steps_to_eval=None):
 def learn(env, model):
     mem = ReplayMemory(CAPACITY, F_HEIGHT, F_WIDTH, BATCH_SIZE, FRAMES_PER_STATE)
     policy = Policy(model, ACTION_NUM, EPS_START, EPS_FINAL, EPS_DECAY)
-    model_ = DQN((BATCH_SIZE, FRAMES_PER_STATE, F_HEIGHT, F_WIDTH))
+    model_ = DQN((BATCH_SIZE, FRAMES_PER_STATE, F_HEIGHT, F_WIDTH), ACTION_NUM)
     model.clone_to(model_)
 
     # loss_fn = torch.nn.SmoothL1Loss()
@@ -553,7 +565,7 @@ if __name__ == '__main__':
     aopts = docopt.docopt(__doc__)
     preproc = Preprocessor(F_HEIGHT, F_WIDTH)
     env = Env(preproc, SKIP_FRAMES, FRAMES_PER_STATE)
-    model = DQN((BATCH_SIZE, FRAMES_PER_STATE, F_HEIGHT, F_WIDTH))
+    model = DQN((BATCH_SIZE, FRAMES_PER_STATE, F_HEIGHT, F_WIDTH), ACTION_NUM)
     loss_history = []
     reward_history = []
     duration_history = []
