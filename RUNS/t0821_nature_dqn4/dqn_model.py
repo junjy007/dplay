@@ -1,10 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
+import numpy as np
 
 
 class DQN(nn.Module):
-    def __init__(self, in_channels=4, num_actions=18):
+    def __init__(self, in_channels=4, num_actions=18, in_h=84, in_w=84):
         super(DQN, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=8, stride=4)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
@@ -14,7 +16,11 @@ class DQN(nn.Module):
         #     ...
         # )
         # 7 x 7 <== 84 x 84, after conv 1/2/3
-        self.fc4 = nn.Linear(7 * 7 * 64, 512)
+        dummy = Variable(torch.FloatTensor(1, in_channels, in_h, in_w), volatile=True)
+        dummy_out = self.conv3(self.conv2(self.conv1(dummy)))
+        self.out_feat_num = np.prod(dummy_out.size()[1:])
+
+        self.fc4 = nn.Linear(self.out_feat_num, 512)
         self.fc5 = nn.Linear(512, num_actions)
 
 

@@ -66,13 +66,11 @@ def dqn_learning(
     :param save_dir:
     :return:
     """
-    assert type(env.action_space) == gym.spaces.Discrete
-    assert type(env.observation_space) == gym.spaces.Box
-
     # build model
     img_h, img_w, img_c = env.observation_space.shape
     input_arg = frame_history_len * img_c  # in_channels = #.frame-history * channels per frame
     num_actions = env.action_space.n
+    random_act_id = env.action_space.random_act_id
 
     # construct an epsilon-greedy policy
     rng = np.random.RandomState(0)
@@ -93,10 +91,11 @@ def dqn_learning(
         else:
             # noinspection PyArgumentList
             return torch.IntTensor([[rng.randint(num_actions)]])
+            # working return torch.IntTensor([[random_act_id]])
 
     # init target q function and q function (two models in the Nature 2015 paper)
-    Q = q_func(input_arg, num_actions).type(ttype)
-    target_Q = q_func(input_arg, num_actions).type(ttype)
+    Q = q_func(input_arg, num_actions, img_h, img_w).type(ttype)
+    target_Q = q_func(input_arg, num_actions, img_h, img_w).type(ttype)
 
     # optimiser
     optimiser = optimiser_spec.constructor(Q.parameters(), **optimiser_spec.kwargs)
@@ -132,7 +131,10 @@ def dqn_learning(
 
     last_obs = env.reset()
     SAVE_EVERY_N_STEPS = 10000
+    REPORT_EVERY_N_STEPS = 1000
     target_Q.load_state_dict(Q.state_dict())
+    episode_rewards = []
+    this_episode_reward = 0
     for t in count(start_step):
         if stopping_criterion is not None and stopping_criterion(env):
             break
@@ -149,15 +151,21 @@ def dqn_learning(
         obs, reward, done, _ = env.step(action)
         reward = max(-1.0, min(reward, 1.0))
         replay_buffer.store_effect(last_idx, action, reward, done)
+        this_episode_reward += reward
         if done:
-            obs = env.reset()
-
+            episode_rewards.append(this_episode_reward)
+            if len(episode_rewards) > 0:
+                mean_episode_reward = np.mean(episode_rewards[-100:])
+            if len(episode_rewards) > 100:
+                best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
+            this_episode_reward = 0
+            # obs = env.reset()
         last_obs = obs
 
         # experience replay and train the network
         if t > learning_starts and \
-                                t % learning_freq == 0 and \
-                replay_buffer.can_sample(batch_size):
+           t % learning_freq == 0 and \
+           replay_buffer.can_sample(batch_size):
 
             obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = \
                 replay_buffer.sample(batch_size)
@@ -193,12 +201,10 @@ def dqn_learning(
             if num_param_updates % target_update_freq == 0:
                 target_Q.load_state_dict(Q.state_dict())
 
+            if num_param_updates % 100 == 0:
+                print num_param_updates
         # log progress
-        episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
-        if len(episode_rewards) > 0:
-            mean_episode_reward = np.mean(episode_rewards[-100:])
-        if len(episode_rewards) > 100:
-            best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
+        #episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
 
         train_status['num_param_updates'] = num_param_updates
         train_status['mean_episode_reward'].append(mean_episode_reward)
@@ -211,10 +217,11 @@ def dqn_learning(
             train_status['latest_checkpoint'] = latest_checkpoint
             with open('{}/latest.json'.format(save_dir), 'w') as f:
                 json.dump(train_status, f)
+            print "- checkpoint saved to {}".format(latest_checkpoint)
 
+        if t % REPORT_EVERY_N_STEPS == 0:
             print "Timestep {}".format(t)
             print "- mean reward {:.2f}".format(mean_episode_reward)
             print "- best mean reward {:.2f}".format(best_mean_episode_reward)
-            print "- checkpoint saved to {}".format(latest_checkpoint)
 
     return  # dqn_learning
