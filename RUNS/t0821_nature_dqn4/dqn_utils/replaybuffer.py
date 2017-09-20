@@ -94,7 +94,13 @@ class ReplayBuffer(object):
                 new_start_i = i + 1
         start_i = new_start_i
         missing_context = self.frame_history_len - (end_i - start_i)
+        # --- debug ---
+        DEBUG_REPLAY_ENCODE = False
+        if DEBUG_REPLAY_ENCODE:
+            print "Encode step {}: start-i {}, end-i {}, missing {}".format(
+                idx, start_i, end_i, missing_context)
         if start_i < 0 or missing_context > 0:
+            # when we CANNOT just take a continuous segment of memory
             frames = [np.zeros_like(self.obs[0]) for _ in range(missing_context)]
             for idx in range(start_i, end_i):
                 frames.append(self.obs[idx % self.size])

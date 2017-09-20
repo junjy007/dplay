@@ -22,12 +22,11 @@ def dqn_evaluate(
         trained_model_fname,
         replay_buffer_size=250000,
         frame_history_len=4,
-        hidden_feature=-1,
-        max_eval_steps=10000,
-        max_eval_episodes=inf,
+        hidden_feature=None,
+        max_eval_steps=np.inf,
+        max_eval_episodes=np.inf,
         save_dir='save'):
     """
-
     :param env:
     :type env: gym.Wrapper
     :param q_func: constructor of a q-estimator
@@ -57,8 +56,9 @@ def dqn_evaluate(
         # we have specified dim=1 in the function call)
         return greedy_action, predicted_action_values
 
-    Q = DQN(input_arg, num_actions).type(FloatTensor)
+    Q = q_func(input_arg, num_actions).type(FloatTensor)
     try:
+        print "Loading from {}".format(trained_model_fname)
         Q.load(trained_model_fname)
     except:
         print "Failed to load from checkpoint {}".format(trained_model_fname)
@@ -82,7 +82,7 @@ def dqn_evaluate(
     rr = 0
     epi_rr = 0
     episodes = 0
-    for t in range(max_evaluation_steps):
+    for t in range(max_eval_steps):
         replay_buffer.store_frame(last_obs)
         recent_observations = replay_buffer.encode_recent_observation()
         action, action_values = select_greedy_action(Q, recent_observations)
@@ -101,3 +101,4 @@ def dqn_evaluate(
             episodes += 1
             epi_rr = 0
 
+    return rec

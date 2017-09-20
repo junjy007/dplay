@@ -1,7 +1,9 @@
 *checkpoint*
 *.*
+!.gitignore
 !*.py
 !*.json
+!*.ipynb
 *checkpoint*/*.json
 info.json
 

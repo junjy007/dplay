@@ -87,6 +87,7 @@ class EnvContra(object):
         self.observation_space = ObservationSpace([self.height, self.width, 3])
         self.total_killed = 0
         self.total_win = 0
+        self.enemy_hp = np.zeros(16)
         self._last_reset_killed = 0
         if state_fname is not None and (not os.path.isabs(state_fname)):
             state_fname = os.path.join(wd, "nes_env", "res", state_fname)
@@ -124,6 +125,8 @@ class EnvContra(object):
         self._boss_killed = (eff[4] == 8 or eff[4] == 9)
         self._play_status = eff[4]
         self._last_reset_killed = self.total_killed
+        for i_, addr in enumerate(range(0x78, 0x88)):
+            self.enemy_hp[i_] = self.game.cheatGetByte(addr)
         return self._getframe()
 
     def _getframe(self):
@@ -247,6 +250,19 @@ class EnvContra(object):
             self._act(ACT_NOOP) # first playable frame after dying - player is invisible
 
 
+    def save_state(self, fname):
+        self.game.saveState(fname)
+
+    def load_state(self, fname):
+        self.state_fname = fname
+        self.reset()
+
+    def begin_movie(self, fname):
+        self.game.beginMovie(fname)
+
+    def end_movie(self):
+        self.game.endMovie()
+
 class ContraWrapper(object):
     def __init__(self, env=None):
         """
@@ -267,7 +283,17 @@ class ContraWrapper(object):
     def frame(self):
         return self._env.frame()
 
+    def save_state(self, fname):
+        self._env.save_state(fname)
 
+    def load_state(self, fname):
+        self._env.load_state(fname)
+
+    def begin_movie(self, fname):
+        self._env.begin_movie(fname)
+
+    def end_movie(self):
+        self._env.end_movie()
 
 def _maxpool2(s):
     """

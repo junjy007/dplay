@@ -1,7 +1,8 @@
-# nes_python_interface.py
-# Author: Ben Goodrich, Ehren J. Brav
-# This partially implements a python version of the arcade learning
-# environment interface.
+"""
+Author Jun Li
+30 Aug 2017
+Adopoted from the wrapper by Ben Goodrich, Ehren J. Brav
+"""
 __all__ = ['NESInterface']
 
 from ctypes import *
@@ -10,8 +11,6 @@ from numpy.ctypeslib import as_ctypes
 import os
 
 _apath = os.path.abspath(os.path.dirname(__file__)) 
-#nes_lib = cdll.LoadLibrary(os.path.join(_apath, 'libfceux.so'))
-#nes_lib = cdll.LoadLibrary(os.path.join(_apath, 'libfceux_plus_noskip.so'))
 nes_lib = cdll.LoadLibrary(os.path.join(_apath, 'nes_interface/build/libnesi.so'))
 
 class NESInterface(object):
@@ -49,6 +48,12 @@ class NESInterface(object):
         return nes_lib.act(self.obj, int(action))
 
     def act(self, action):
+        """
+        :param action:
+        :return: 32 integer, can be helpful to get internal states of a game.
+
+        Note this function is more for convenience, see cheatGetByte.
+        """
         nes_lib.act.argtypes = [c_void_p, c_int, c_void_p]
         nes_lib.act.restype = c_int
         effects = np.zeros(shape=(32,), dtype=c_int)
@@ -252,6 +257,20 @@ class NESInterface(object):
 
     def decodeState(self, serialized):
         return nes_lib.decodeState(as_ctypes(serialized), len(serialized))
+
+
+    def beginMovie(self, fname):
+        """begin recording avi"""
+        byte_string_state_fname = fname.encode('utf-8')
+        nes_lib.beginAVI.argtypes = [c_void_p, c_char_p]
+        nes_lib.beginAVI.restype = c_int
+        return nes_lib.beginAVI(self.obj, byte_string_state_fname)
+
+    def endMovie(self):
+        """stop and save AVI movie"""
+        nes_lib.endAVI.argtypes = [c_void_p]
+        nes_lib.endAVI.restype = None
+        nes_lib.endAVI(self.obj)
 
     def __del__(self):
         nes_lib.delete_NES.argtypes = [c_void_p]
